@@ -5,6 +5,7 @@
 ## Содержание
 
 - [Структура проекта](#структура-проекта)
+- [Модели (веса)](#модели-веса)
 - [Повторный process_link](#повторный-process_link)
 - [Детекция и SMB](#что-происходит-при-детекции-и-когда-объектов-нет)
 - [Полный процесс process_link](#полный-процесс-post-apiv1projectsprocess_link-1с--путь-к-файлу-на-smb)
@@ -29,11 +30,42 @@
 | `app/main.py` | FastAPI, SMB, детекция, датасет, журнал, настройки |
 | `app/perf.py` | Сбор метрик `perf` в `extra_json` |
 | `static/` | UI и PWA (`index.html`, `app.js`, `sw.js`) |
-| `model_data/` | YOLO / OpenVINO модели (часть через Git LFS) |
+| `model_data/` | YOLO / OpenVINO модели (веса **не в git**, см. [Модели (веса)](#модели-веса)) |
 | `db/sets.db` | SQLite: `api_request_log`, датасет, `request_history` |
 | `data/` | runtime settings, кандидаты датасета, превью, экспорты |
 | `.env` | Секреты и дефолты окружения (**не в git**, см. `.env.example`) |
-| `scripts/` | Вспомогательные утилиты (например разбор классов `.pt`) |
+| `scripts/` | Вспомогательные утилиты (загрузка моделей, разбор классов `.pt`) |
+
+---
+
+## Модели (веса)
+
+Веса моделей — большие бинарники, поэтому они **не хранятся в git** и выкладываются отдельно
+(на Яндекс.Диск). В репозитории остаётся только структура (`*.xml`, списки классов), сами веса
+нужно скачать перед запуском.
+
+Файлы, которые лежат в архиве и распаковываются в `model_data/`:
+
+- `model_data/best_openvino_model/best.bin` — основная OpenVINO-модель (по умолчанию `MODEL_PATH`);
+- `model_data/best_int8_openvino_model/best.bin` — квантованная INT8-версия;
+- `model_data/container.openvino/best_openvino_model/best.bin` — альтернативная OpenVINO-модель;
+- `model_data/garbage.pt`, `model_data/garbage_old.pt` — модели в формате PyTorch.
+
+Публичная ссылка на архив (Яндекс.Диск): **https://disk.yandex.ru/d/H99ovrbBNjnzAg**
+
+### Скачать автоматически
+
+```bash
+scripts/download_models.sh "https://disk.yandex.ru/d/H99ovrbBNjnzAg"
+```
+
+Скрипт через публичный API Яндекс.Диска получает прямую ссылку, скачивает архив
+и распаковывает его в `model_data/` с сохранением путей.
+
+### Скачать вручную
+
+1. Откройте [публичную ссылку](https://disk.yandex.ru/d/H99ovrbBNjnzAg) и скачайте архив `container-detection-models.zip`.
+2. Распакуйте его в корень проекта так, чтобы файлы легли в `model_data/...`.
 
 ---
 
