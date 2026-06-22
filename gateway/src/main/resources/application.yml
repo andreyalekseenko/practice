@@ -1,0 +1,35 @@
+server:
+  port: 8080
+  # Шлюз отдаёт фронтенд (PWA) и проксирует API — поднимаем лимит на загрузку фото.
+  tomcat:
+    max-swallow-size: 64MB
+    max-http-form-post-size: 64MB
+
+spring:
+  application:
+    name: container-detection-gateway
+  servlet:
+    multipart:
+      # Шлюз НЕ разбирает multipart сам — он пересылает сырое тело запроса
+      # (включая границы) в Python-сервис. Поэтому авторазбор отключён,
+      # иначе входной поток был бы прочитан до прокси и тело потерялось бы.
+      enabled: false
+
+gateway:
+  # Базовый URL Python-сервиса распознавания. В docker-compose переопределяется
+  # переменной GATEWAY_PYTHON_SERVICE_URL=http://detector:8000
+  python-service-url: ${GATEWAY_PYTHON_SERVICE_URL:http://localhost:8000}
+  timeout-ms: ${GATEWAY_TIMEOUT_MS:60000}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+
+logging:
+  level:
+    com.example.containers.gateway: INFO

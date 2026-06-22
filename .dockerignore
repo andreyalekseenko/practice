@@ -1,0 +1,8 @@
+.git
+gateway/target
+images
+db
+data
+**/__pycache__
+*.pyc
+.env.example

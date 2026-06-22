@@ -1,0 +1,29 @@
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.idea/
+.vscode/
+*.swp
+*.swo
+db/*.db
+data/runtime_settings.json
+data/exports/
+data/dataset_candidates/
+data/request_preview_images/
+data/training_runs/
+
+# Java / Maven (gateway)
+gateway/target/
+*.class
+
+# Веса моделей (большие бинарники; git-lfs недоступен).
+# Хранятся отдельно, кладутся в model_data/ при развёртывании.
+*.pt
+model_data/**/*.bin

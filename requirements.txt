@@ -1,0 +1,11 @@
+# Python-сервис распознавания (FastAPI + YOLO/OpenVINO).
+# Зависимости выведены из импортов app/main.py и app/perf.py.
+fastapi>=0.110
+uvicorn[standard]>=0.29
+python-multipart>=0.0.9
+pydantic>=2.6
+numpy>=1.26
+opencv-python-headless>=4.9
+pillow>=10.2
+ultralytics>=8.1
+openvino>=2024.0
