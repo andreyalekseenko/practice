@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0c1219" />
+  <meta name="description" content="Распознавание контейнеров, датасет YOLO и журнал запросов 1С" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <title>Детекция контейнеров</title>
+  <link rel="manifest" href="/manifest.webmanifest" />
+  <link rel="icon" href="/static/icons/icon-192.png" sizes="192x192" type="image/png" />
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/style.css?v=12" />
+</head>
+<body>
+  <a class="skip-link" href="#main-content">К основному содержимому</a>
+  <main id="main-content" class="wrap">
+    <header class="hero">
+      <div class="hero-brand">
+        <span class="hero-badge" aria-hidden="true">CV</span>
+        <div>
+          <h1>Детекция контейнеров</h1>
+          <p class="hint hero-tagline">Загрузка изображений, разметка, датасет и мониторинг запросов из 1С — в одном интерфейсе.</p>
+        </div>
+      </div>
+      <div id="health" class="status-pill" role="status" aria-live="polite">Загрузка…</div>
+    </header>
+
+    <nav class="tabs" role="tablist" aria-label="Разделы приложения">
+      <button class="tab-btn active" role="tab" aria-selected="true" aria-controls="panel-detect" id="tab-detect" data-tab="detect" type="button">Распознавание</button>
+      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-dataset" id="tab-dataset" data-tab="dataset" type="button">Датасет</button>
+      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-performance" id="tab-performance" data-tab="performance" type="button">Производительность</button>
+      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-settings" id="tab-settings" data-tab="settings" type="button">Настройки</button>
+      <button class="tab-btn" role="tab" aria-selected="false" aria-controls="panel-logs" id="tab-logs" data-tab="logs" type="button">Журналы</button>
+    </nav>
+
+    <section id="panel-detect" class="tab-panel active" role="tabpanel" aria-labelledby="tab-detect" data-tab-panel="detect" aria-hidden="false">
+      <section class="panel">
+        <div id="detectOnboarding" class="onboarding-callout">
+          <div class="onboarding-callout-text">
+            <strong>Как пользоваться.</strong> Перетащите снимок в область ниже или нажмите для выбора файла. Порог уверенности можно изменить сверху — он влияет на количество показанных рамок. JSON-ответ API разворачивается внизу.
+          </div>
+          <button id="dismissDetectOnboarding" class="secondary-btn" type="button">Понятно</button>
+        </div>
+        <div class="panel-head">
+          <h2>Ручная проверка</h2>
+          <label class="field-inline">Порог <input id="conf" type="number" min="0.01" max="0.999" step="0.01" value="0.7" /></label>
+        </div>
+        <div id="drop" class="drop" tabindex="0" aria-label="Область загрузки изображения">
+          <strong>Перетащите изображение сюда</strong>
+          <span class="drop-sub">или нажмите, чтобы выбрать файл с диска</span>
+          <input id="file" type="file" accept="image/*" aria-label="Выбор файла изображения" />
+        </div>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+        <div class="stage-wrap">
+          <canvas id="detectCanvas" width="960" height="540" aria-label="Результат распознавания"></canvas>
+        </div>
+        <details class="json-details">
+          <summary>Ответ API (JSON)</summary>
+          <pre id="predictJson" class="json-box"></pre>
+        </details>
+      </section>
+    </section>
+
+    <section id="panel-dataset" class="tab-panel" role="tabpanel" aria-labelledby="tab-dataset" data-tab-panel="dataset" aria-hidden="true">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Датасет для обучения</h2>
+            <p id="datasetCounts" class="hint">Кандидаты: — · Подтверждено: — · Отклонено: —</p>
+          </div>
+          <div class="actions">
+            <select id="datasetStatusFilter">
+              <option value="candidate">Новые</option>
+              <option value="approved">Подтверждённые</option>
+              <option value="rejected">Отклонённые</option>
+              <option value="all">Все</option>
+            </select>
+            <button id="refreshDatasetBtn" class="secondary-btn" type="button">Обновить</button>
+            <button id="deleteCandidatesBtn" class="danger-btn" type="button">Удалить кандидатов</button>
+            <button id="deleteLabeledBtn" class="danger-btn" type="button">Удалить размеченные</button>
+          </div>
+        </div>
+        <div class="dataset-cards">
+          <article class="dataset-card">
+            <h3 class="dataset-card-heading">Автосохранение кандидатов</h3>
+            <p class="hint dataset-card-lead">Распознавание выполняется по <strong>всем</strong> классам модели. В датасет попадают только снимки, где найден хотя бы один выбранный класс (с уверенностью не ниже порога).</p>
+            <div class="dataset-card-body">
+              <div class="actions dataset-autosave-actions">
+                <label class="field-inline check"><input id="datasetAutosaveEnabled" type="checkbox" /> Включить автосохранение</label>
+                <label class="field-inline">Порог уверенности <input id="datasetAutosaveScore" type="number" min="0.01" max="0.999" step="0.01" /></label>
+                <button id="saveDatasetAutosaveBtn" class="primary-btn" type="button">Сохранить правила</button>
+              </div>
+              <p class="hint">Классы для добавления в датасет (при обнаружении):</p>
+              <div id="datasetAutosaveClassIds" class="dataset-class-filters" role="group" aria-label="Классы автосохранения"></div>
+              <div id="datasetAutosaveStatus" class="status"></div>
+            </div>
+          </article>
+          <article class="dataset-card">
+            <h3 class="dataset-card-heading">Экспорт</h3>
+            <p class="hint dataset-card-lead">Параметры ZIP и доли train / val / test для сборки датасета YOLO.</p>
+            <div class="dataset-card-body">
+              <div class="actions dataset-export-actions">
+                <label class="field-inline">Лимит ZIP <input id="exportDatasetLimit" type="number" min="0" value="0" /></label>
+                <label class="field-inline">Train % <input id="exportTrainPct" type="number" min="0" max="100" value="70" /></label>
+                <label class="field-inline">Val % <input id="exportValPct" type="number" min="0" max="100" value="20" /></label>
+                <label class="field-inline">Test % <input id="exportTestPct" type="number" min="0" max="100" value="10" /></label>
+                <button id="exportDatasetBtn" class="primary-btn" type="button">Собрать датасет YOLO</button>
+              </div>
+              <div id="datasetStatus" class="status"></div>
+            </div>
+          </article>
+          <article class="dataset-card">
+            <h3 class="dataset-card-heading">Список</h3>
+            <p class="hint dataset-card-lead">Выберите элемент списка — превью и подтверждение справа.</p>
+            <div class="dataset-card-body">
+              <div class="dataset-grid">
+                <ul id="datasetList" class="list"></ul>
+                <div class="preview-card">
+                  <h3 id="datasetPreviewTitle">Выберите кандидата</h3>
+                  <p id="datasetPreviewMeta" class="hint"></p>
+                  <div class="actions">
+                    <button id="approveDatasetBtn" class="primary-btn" type="button" disabled>Подтвердить</button>
+                    <button id="rejectDatasetBtn" class="secondary-btn" type="button" disabled>Отклонить</button>
+                  </div>
+                  <canvas id="datasetCanvas" width="720" height="480"></canvas>
+                </div>
+              </div>
+            </div>
+          </article>
+        </div>
+      </section>
+    </section>
+
+    <section id="panel-performance" class="tab-panel" role="tabpanel" aria-labelledby="tab-performance" data-tab-panel="performance" aria-hidden="true">
+      <section class="panel performance-panel">
+        <div class="panel-head">
+          <div>
+            <h2>Скорость распознавания</h2>
+            <p class="hint">Canvas-график min / avg / max по запросам распознавания.</p>
+          </div>
+          <button id="refreshPerfBtn" class="secondary-btn" type="button">Обновить</button>
+        </div>
+        <div class="actions perf-filters">
+          <label class="field-inline">Источник
+            <select id="perfKind">
+              <option value="1c" selected>1С process_link</option>
+              <option value="predict">Ручное /api/predict</option>
+              <option value="all">Все распознавания</option>
+            </select>
+          </label>
+          <label class="field-inline">Метрика
+            <select id="perfMetric">
+              <option value="duration_ms" selected>Полное время запроса</option>
+              <option value="inference_ms">Только инференс модели</option>
+            </select>
+          </label>
+          <label class="field-inline">Период, ч <input id="perfHours" type="number" min="1" max="720" value="24" /></label>
+          <label class="field-inline">Шаг, мин <input id="perfBucket" type="number" min="1" max="1440" value="15" /></label>
+        </div>
+        <div id="perfKpi" class="perf-kpi"></div>
+        <div class="perf-chart-card">
+          <canvas id="perfCanvas" width="1120" height="460"></canvas>
+          <div id="perfTooltip" class="perf-tooltip hidden"></div>
+        </div>
+        <div id="perfStatus" class="status"></div>
+      </section>
+    </section>
+
+    <section id="panel-settings" class="tab-panel" role="tabpanel" aria-labelledby="tab-settings" data-tab-panel="settings" aria-hidden="true">
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2>Настройки</h2>
+            <p class="hint">Сохраняются автоматически в runtime settings.</p>
+          </div>
+          <button id="saveSettingsBtn" class="primary-btn" type="button">Сохранить</button>
+        </div>
+        <div class="settings-groups">
+          <section class="settings-group">
+            <h3>Детекция</h3>
+            <div class="settings-grid">
+              <label class="setting-field"><span>Активная модель <button class="help-dot" title="Выбор PT или OpenVINO модели" type="button">?</button></span><select id="settingModelPath"></select></label>
+              <label class="setting-field"><span>API уверенность <button class="help-dot" title="Порог ручного /api/predict" type="button">?</button></span><input id="settingDetectScore" type="number" min="0.01" max="0.999" step="0.01" /></label>
+              <label class="setting-field"><span>Dataset уверенность <button class="help-dot" title="Порог автосохранения candidates" type="button">?</button></span><input id="settingDatasetScore" type="number" min="0.01" max="0.999" step="0.01" /></label>
+              <label class="setting-field"><span>Old уверенность <button class="help-dot" title="Порог старой модели" type="button">?</button></span><input id="settingOldScore" type="number" min="0.01" max="0.999" step="0.01" /></label>
+              <label class="setting-field"><span>NMS IoU <button class="help-dot" title="Подавление пересекающихся боксов" type="button">?</button></span><input id="settingNmsIou" type="number" min="0.05" max="0.95" step="0.01" /></label>
+              <label class="setting-field"><span>Diff IoU <button class="help-dot" title="Сравнение old/current" type="button">?</button></span><input id="settingDiffIou" type="number" min="0.01" max="0.99" step="0.01" /></label>
+              <label class="setting-field"><span>imgsz</span><input id="settingImageSize" type="number" min="320" max="4096" step="32" /></label>
+              <label class="setting-field"><span>Часовой пояс</span><select id="settingTimezone"><option>Europe/Moscow</option><option>UTC</option><option>Asia/Yekaterinburg</option><option>Asia/Novosibirsk</option><option>Asia/Vladivostok</option></select></label>
+              <label class="setting-field check"><input id="settingOldDetectEnabled" type="checkbox" /> Включить old-модель</label>
+              <label class="setting-field check"><input id="settingDatasetAutosave" type="checkbox" /> Автосохранение candidates</label>
+              <label class="setting-field check"><input id="settingRequestPreviewSave" type="checkbox" /> Сохранять превью в журнале API (JPEG на диск)</label>
+            </div>
+            <p class="hint">Классы для автосохранения в датасет (те же правила, что на вкладке «Датасет»):</p>
+            <div id="settingDatasetClassIds" class="dataset-class-filters" role="group" aria-label="Классы автосохранения в настройках"></div>
+          </section>
+          <section class="settings-group">
+            <h3>SMB</h3>
+            <div class="settings-grid">
+              <label class="setting-field"><span>SMB current</span><input id="settingSmbScore" type="number" min="0.01" max="0.999" step="0.01" /></label>
+              <label class="setting-field"><span>SMB old</span><input id="settingSmbOldScore" type="number" min="0.01" max="0.999" step="0.01" /></label>
+              <label class="setting-field"><span>SMB лимит</span><input id="settingSmbLimit" type="number" min="1" max="5000" /></label>
+              <label class="setting-field"><span>Сжатие max side</span><input id="settingSmbCompressMaxSide" type="number" min="320" max="8192" step="32" /></label>
+              <label class="setting-field"><span>JPEG quality</span><input id="settingSmbCompressQuality" type="number" min="40" max="100" /></label>
+              <label class="setting-field check"><input id="settingSmbCompressEnabled" type="checkbox" /> Сжимать исходник SMB</label>
+              <label class="setting-field check"><input id="settingSmbFixExifOrientation" type="checkbox" /> Исправлять EXIF orientation</label>
+              <label class="setting-field check"><input id="settingSmbUseLimit" type="checkbox" /> SMB ограничивать</label>
+              <label class="setting-field check"><input id="settingSmbDryRun" type="checkbox" /> SMB только проверить</label>
+            </div>
+          </section>
+          <section class="settings-group">
+            <h3>Операции</h3>
+            <div class="settings-grid">
+              <label class="setting-field"><span>Relabel порог</span><input id="settingRelabelThreshold" type="number" min="0.01" max="0.999" step="0.001" /></label>
+              <label class="setting-field"><span>Relabel лимит</span><input id="settingRelabelLimit" type="number" min="0" max="100000" /></label>
+              <label class="setting-field"><span>Export лимит</span><input id="settingExportLimit" type="number" min="0" max="100000" /></label>
+              <label class="setting-field"><span>Train %</span><input id="settingTrainPct" type="number" min="0" max="100" /></label>
+              <label class="setting-field"><span>Val %</span><input id="settingValPct" type="number" min="0" max="100" /></label>
+              <label class="setting-field"><span>Test %</span><input id="settingTestPct" type="number" min="0" max="100" /></label>
+              <label class="setting-field"><span>Train epochs</span><input id="settingTrainEpochs" type="number" min="1" max="500" /></label>
+              <label class="setting-field"><span>Train batch</span><input id="settingTrainBatch" type="number" min="1" max="64" /></label>
+              <label class="setting-field"><span>Train лимит</span><input id="settingTrainLimit" type="number" min="0" max="100000" /></label>
+              <label class="setting-field"><span>Zip TTL, ч</span><input id="settingZipTtl" type="number" min="1" max="720" /></label>
+            </div>
+          </section>
+        </div>
+        <div id="settingsStatus" class="status"></div>
+      </section>
+
+      <section class="panel">
+        <h2>Переразметка кандидатов</h2>
+        <div class="actions">
+          <label class="field-inline">Порог <input id="relabelThreshold" type="number" value="0.99" min="0.01" max="0.999" step="0.001" /></label>
+          <label class="field-inline">Лимит <input id="relabelLimit" type="number" value="0" min="0" /></label>
+          <button id="relabelCandidatesBtn" class="primary-btn" type="button">Переразметить и подтвердить</button>
+        </div>
+        <div id="relabelStatus" class="status"></div>
+        <pre id="relabelResult" class="json-box"></pre>
+      </section>
+
+      <section class="panel">
+        <h2>Обучение модели</h2>
+        <div class="actions">
+          <label class="field-inline">Epochs <input id="trainEpochs" type="number" value="30" min="1" /></label>
+          <label class="field-inline">Batch <input id="trainBatch" type="number" value="4" min="1" /></label>
+          <label class="field-inline">imgsz <input id="trainImageSize" type="number" value="1024" min="320" step="32" /></label>
+          <label class="field-inline">Лимит <input id="trainLimit" type="number" value="0" min="0" /></label>
+          <button id="startTrainingBtn" class="primary-btn" type="button">Запустить обучение</button>
+        </div>
+        <div id="trainingStatus" class="status"></div>
+        <pre id="trainingResult" class="json-box"></pre>
+      </section>
+
+      <section class="panel">
+        <h2>Импорт из SMB</h2>
+        <div class="actions">
+          <label class="field-inline"><input id="smbIngestUseLimit" type="checkbox" checked /> Ограничить количество</label>
+          <label class="field-inline">Лимит <input id="smbIngestLimit" type="number" value="20" min="1" /></label>
+          <label class="field-inline"><input id="smbIngestDryRun" type="checkbox" checked /> Только проверить</label>
+          <button id="smbIngestBtn" class="primary-btn" type="button">Обработать каталоги</button>
+        </div>
+        <textarea id="smbIngestDirs" class="smb-ingest-dirs"></textarea>
+        <div id="smbIngestStatus" class="status"></div>
+        <pre id="smbIngestResult" class="json-box"></pre>
+      </section>
+    </section>
+
+    <section id="panel-logs" class="tab-panel" role="tabpanel" aria-labelledby="tab-logs" data-tab-panel="logs" aria-hidden="true">
+      <section class="panel">
+        <div class="panel-head">
+          <h2>История API</h2>
+          <button id="refreshApiHistoryBtn" class="secondary-btn" type="button">Обновить</button>
+        </div>
+        <div class="actions history-filters">
+          <label class="field-inline">Тип
+            <select id="apiHistoryKind">
+              <option value="1c" selected>1С распознавание</option>
+              <option value="predict">Ручное распознавание</option>
+              <option value="ui">UI/API без распознавания</option>
+              <option value="all">Все запросы</option>
+            </select>
+          </label>
+          <label class="field-inline">IP <input id="apiHistoryIp" type="text" placeholder="например 172.16.123.98" /></label>
+          <label class="field-inline">Путь содержит <input id="apiHistoryPath" type="text" placeholder="process_link" /></label>
+          <label class="field-inline">Лимит <input id="apiHistoryLimit" type="number" min="1" max="200" value="50" /></label>
+        </div>
+        <div class="table-box" tabindex="0">
+          <table class="stats-table">
+            <thead><tr><th>Время</th><th>Метод</th><th>Путь</th><th>Статус</th><th>Время</th><th>IP</th><th>Детали</th><th>Просмотр</th></tr></thead>
+            <tbody id="apiHistoryBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </section>
+  </main>
+
+  <nav class="mobile-tabbar" role="navigation" aria-label="Разделы (мобильное меню)">
+    <button class="mobile-tab-btn active" type="button" data-tab="detect" aria-current="page" aria-selected="true">Детекция</button>
+    <button class="mobile-tab-btn" type="button" data-tab="dataset" aria-selected="false">Датасет</button>
+    <button class="mobile-tab-btn" type="button" data-tab="performance" aria-selected="false">Скорость</button>
+    <button class="mobile-tab-btn" type="button" data-tab="settings" aria-selected="false">Настройки</button>
+    <button class="mobile-tab-btn" type="button" data-tab="logs" aria-selected="false">Журнал</button>
+  </nav>
+
+  <div id="apiPreviewModal" class="modal hidden">
+    <div id="apiPreviewBackdrop" class="modal-backdrop"></div>
+    <div class="modal-sheet">
+      <div class="modal-toolbar">
+        <h3>Разметка по записи API</h3>
+        <div class="actions">
+          <button id="apiPreviewRecalc" class="primary-btn" type="button" disabled>Пересчитать</button>
+          <button id="apiPreviewClose" class="secondary-btn" type="button">Закрыть</button>
+        </div>
+      </div>
+      <p id="apiPreviewHint" class="hint"></p>
+      <p id="apiPreviewMeta" class="hint"></p>
+      <div class="stage-wrap"><canvas id="apiPreviewCanvas" width="900" height="600"></canvas></div>
+    </div>
+  </div>
+
+  <script src="/app.js?v=10"></script>
+</body>
+</html>

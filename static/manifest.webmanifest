@@ -1,0 +1,26 @@
+{
+  "name": "Детекция контейнеров",
+  "short_name": "Контейнеры",
+  "description": "Распознавание контейнеров, датасет YOLO и журнал запросов 1С",
+  "start_url": "/index.html",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0c1219",
+  "theme_color": "#0c1219",
+  "lang": "ru",
+  "icons": [
+    {
+      "src": "/static/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/static/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
